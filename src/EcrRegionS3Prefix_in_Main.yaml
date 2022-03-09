@@ -1,0 +1,23 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  #------------------ ManagedPrefix for S3
+  EcrS3PrefixList:
+    Type: AWS::EC2::PrefixList
+    Properties: 
+      PrefixListName: "FargatePoC-com.amazonaws.ap-southeast-2.s3"
+      AddressFamily: "IPv4"
+      MaxEntries: 20
+      Entries: 
+        - Cidr: "3.5.164.0/22"
+        - Cidr: "3.5.168.0/23"
+        - Cidr: "52.95.128.0/21"
+      Tags: 
+        - Key: "Name"
+          Value: "FargatePoC-com.amazonaws.ap-southeast-2.s3"
+  #------------------ Lambda
+  #------------------ IAM
+Outputs:
+  EcrS3PrefixListId:
+    Value: !Ref EcrS3PrefixList
+    Export:
+      Name: !Sub "${AWS::StackName}-EcrS3PrefixListId"

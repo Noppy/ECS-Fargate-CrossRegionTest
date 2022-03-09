@@ -1,0 +1,255 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  #------------------
+  EcrAwsAccountId:
+    Type: "String"
+    AllowedPattern: "^[0-9]{12}$"
+  EcrVPCCidr:
+    Type: "String"
+    MinLength: 9
+    MaxLength: 18
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: Must be like 10.1.0.0/16
+  EcrRegionS3Prefix1:
+    Type: "String"
+    Default: ""
+  EcrRegionS3Prefix2:
+    Type: "String"
+    Default: ""
+  EcrRegionS3Prefix3:
+    Type: "String"
+    Default: ""
+  EcrRegionS3Prefix4:
+    Type: "String"
+    Default: ""
+  EcrRegionS3Prefix5:
+    Type: "String"
+    Default: ""
+#----------------------------------------------
+Conditions: 
+  CheckEcrRegionS3Prefix2: !Not [ !Equals [ !Ref EcrRegionS3Prefix2, "" ] ]
+  CheckEcrRegionS3Prefix3: !Not [ !Equals [ !Ref EcrRegionS3Prefix3, "" ] ]
+  CheckEcrRegionS3Prefix4: !Not [ !Equals [ !Ref EcrRegionS3Prefix4, "" ] ]
+  CheckEcrRegionS3Prefix5: !Not [ !Equals [ !Ref EcrRegionS3Prefix5, "" ] ]
+#----------------------------------------------
+Resources:
+  #------------------ TGW1
+  Tgw1:
+    Type: AWS::EC2::TransitGateway
+    Properties: 
+      AmazonSideAsn: 64513
+      AutoAcceptSharedAttachments: "enable"
+      DefaultRouteTableAssociation: "disable"
+      DefaultRouteTablePropagation: "disable"
+      DnsSupport: "enable"
+      Tags: 
+        - Key: "Name"
+          Value: "FargatePoC-TGW1"
+  Tgw1RouteTable:
+    Type: AWS::EC2::TransitGatewayRouteTable
+    Properties: 
+      TransitGatewayId: !Ref Tgw1
+      Tags: 
+        - Key: "Name"
+          Value: "FargatePoC-TGW1-RouteTable"
+  #------------------　Attach VPC
+  AttachComputeVpcToTgw1:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      TransitGatewayId: !Ref Tgw1
+      VpcId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+      SubnetIds:
+        - Fn::ImportValue: FargetePoC-ComputeVPC-TgwSubnet1Id
+        - Fn::ImportValue: FargetePoC-ComputeVPC-TgwSubnet2Id
+      Tags:
+        - Key: "Name"
+          Value: "FargetePoC-AttachComputeVpcToTgw1"
+  AssociateTgw1RouteTableToComputeVpc:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    Properties: 
+      TransitGatewayAttachmentId: !Ref AttachComputeVpcToTgw1
+      TransitGatewayRouteTableId: !Ref Tgw1RouteTable
+  PropagateComputeVpcCidrToTgw1RouteTable:
+    Type: AWS::EC2::TransitGatewayRouteTablePropagation
+    Properties: 
+        TransitGatewayAttachmentId: !Ref AttachComputeVpcToTgw1
+        TransitGatewayRouteTableId: !Ref Tgw1RouteTable
+  #------------------　Add routes to ComputeVPC PrivateSubnet1 Route table. 
+  #Add routes(EcrVPC)
+  AddTgw1RouteToComputeVpcPrivateSubnet1RouteEcrVPC:
+    DependsOn:
+      - AttachComputeVpcToTgw1
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1RouteTableId
+      DestinationCidrBlock: !Ref EcrVPCCidr
+      TransitGatewayId: !Ref Tgw1
+  #Add routes(EcrRegion S3 Prefix-1)
+  AddTgw1RouteToComputeVpcPrivateSubnet1RouteEcrRegionS3Prefix1:
+    DependsOn:
+      - AttachComputeVpcToTgw1
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1RouteTableId
+      DestinationCidrBlock: !Ref EcrRegionS3Prefix1
+      TransitGatewayId: !Ref Tgw1
+  #Add routes(EcrRegion S3 Prefix-2)
+  AddTgw1RouteToComputeVpcPrivateSubnet1RouteEcrRegionS3Prefix2:
+    Condition: CheckEcrRegionS3Prefix2
+    DependsOn:
+      - AttachComputeVpcToTgw1
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1RouteTableId
+      DestinationCidrBlock: !Ref EcrRegionS3Prefix2
+      TransitGatewayId: !Ref Tgw1
+  #Add routes(EcrRegion S3 Prefix-3)
+  AddTgw1RouteToComputeVpcPrivateSubnet1RouteEcrRegionS3Prefix3:
+    Condition: CheckEcrRegionS3Prefix3
+    DependsOn:
+      - AttachComputeVpcToTgw1
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1RouteTableId
+      DestinationCidrBlock: !Ref EcrRegionS3Prefix3
+      TransitGatewayId: !Ref Tgw1
+  #Add routes(EcrRegion S3 Prefix-4)
+  AddTgw1RouteToComputeVpcPrivateSubnet1RouteEcrRegionS3Prefix4:
+    Condition: CheckEcrRegionS3Prefix4
+    DependsOn:
+      - AttachComputeVpcToTgw1
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1RouteTableId
+      DestinationCidrBlock: !Ref EcrRegionS3Prefix4
+      TransitGatewayId: !Ref Tgw1
+  #Add routes(EcrRegion S3 Prefix-5)
+  AddTgw1RouteToComputeVpcPrivateSubnet1RouteEcrRegionS3Prefix5:
+    Condition: CheckEcrRegionS3Prefix5
+    DependsOn:
+      - AttachComputeVpcToTgw1
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1RouteTableId
+      DestinationCidrBlock: !Ref EcrRegionS3Prefix5
+      TransitGatewayId: !Ref Tgw1
+  #------------------　Add routes to ComputeVPC PrivateSubnet2 Route table. 
+  #Add routes(EcrVPC)
+  AddTgw1RouteToComputeVpcPrivateSubnet2RouteEcrVPC:
+    DependsOn:
+      - AttachComputeVpcToTgw1
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2RouteTableId
+      DestinationCidrBlock: !Ref EcrVPCCidr
+      TransitGatewayId: !Ref Tgw1
+  #Add routes(EcrRegion S3 Prefix-1)
+  AddTgw1RouteToComputeVpcPrivateSubnet2RouteEcrRegionS3Prefix1:
+    DependsOn:
+      - AttachComputeVpcToTgw1
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2RouteTableId
+      DestinationCidrBlock: !Ref EcrRegionS3Prefix1
+      TransitGatewayId: !Ref Tgw1
+  #Add routes(EcrRegion S3 Prefix-2)
+  AddTgw1RouteToComputeVpcPrivateSubnet2RouteEcrRegionS3Prefix2:
+    DependsOn:
+      - AttachComputeVpcToTgw1
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2RouteTableId
+      DestinationCidrBlock: !Ref EcrRegionS3Prefix2
+      TransitGatewayId: !Ref Tgw1
+  #Add routes(EcrRegion S3 Prefix-3)
+  AddTgw1RouteToComputeVpcPrivateSubnet2RouteEcrRegionS3Prefix3:
+    Condition: CheckEcrRegionS3Prefix3
+    DependsOn:
+      - AttachComputeVpcToTgw1
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2RouteTableId
+      DestinationCidrBlock: !Ref EcrRegionS3Prefix3
+      TransitGatewayId: !Ref Tgw1
+  #Add routes(EcrRegion S3 Prefix-4)
+  AddTgw1RouteToComputeVpcPrivateSubnet2RouteEcrRegionS3Prefix4:
+    Condition: CheckEcrRegionS3Prefix4
+    DependsOn:
+      - AttachComputeVpcToTgw1
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2RouteTableId
+      DestinationCidrBlock: !Ref EcrRegionS3Prefix4
+      TransitGatewayId: !Ref Tgw1
+  #Add routes(EcrRegion S3 Prefix-5)
+  AddTgw1RouteToComputeVpcPrivateSubnet2RouteEcrRegionS3Prefix5:
+    Condition: CheckEcrRegionS3Prefix5
+    DependsOn:
+      - AttachComputeVpcToTgw1
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2RouteTableId
+      DestinationCidrBlock: !Ref EcrRegionS3Prefix5
+      TransitGatewayId: !Ref Tgw1
+  #------------------　RAM
+  Tgw1Share:
+    Type: AWS::RAM::ResourceShare
+    Properties: 
+      Name: "FargatePoC-TGW1-share"
+      AllowExternalPrincipals: false
+      ResourceArns: 
+        - Fn::Join:
+          - ""
+          - - "arn:aws:ec2:"
+            - !Ref AWS::Region
+            - ":"
+            - !Ref AWS::AccountId
+            - ":transit-gateway/"
+            - !Ref Tgw1
+      Principals: 
+        - !Ref EcrAwsAccountId
+      Tags: 
+        - Key: "Name"
+          Value: "FargatePoC-TGW1-share"
+#----------------------------------------------
+Outputs:
+  Tgw1Id:
+    Description: TGW1 ID
+    Value: !Ref Tgw1
+    Export:
+      Name: !Sub ${AWS::StackName}-Tgw1Id
+  Tgw1Arn:
+    Description: TGW1 ARN
+    Value:
+      Fn::Join:
+          - ""
+          - - "arn:aws:ec2:"
+            - !Ref AWS::Region
+            - ":"
+            - !Ref AWS::AccountId
+            - ":transit-gateway/"
+            - !Ref Tgw1
+    Export:
+      Name: !Sub ${AWS::StackName}-Tgw1Arn
+  Tgw1RouteTableId:
+    Description: TGW1 Route Table ID
+    Value: !Ref Tgw1RouteTable
+    Export:
+      Name: !Sub ${AWS::StackName}-Tgw1RouteTableId
+
+
+
+      

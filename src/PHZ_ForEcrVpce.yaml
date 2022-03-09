@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  EcrRegion:
+    Type: "String"
+  EcrApiVpceDnsName:
+    Type: "String"
+  EcrApiVpceDnsHostedZoneId:
+    Type: "String"
+  EcrDkrVpceDnsName:
+    Type: "String"
+  EcrDkrVpceDnsHostedZoneId:
+    Type: "String"
+Resources:
+  #------------------ PHZ for Ecr
+  EcrVpcePhz:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      HostedZoneConfig:
+        Comment: "PHZ for ECR VPC endpoints"
+      Name: !Sub ecr.${EcrRegion}.amazonaws.com.
+      VPCs:
+        - VPCId:
+            Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+          VPCRegion: !Ref AWS::Region
+  EcrApiRecode:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId : !Ref EcrVpcePhz
+      Name: !Sub "api.ecr.${EcrRegion}.amazonaws.com"
+      Type: A
+      AliasTarget:
+        DNSName: !Ref EcrApiVpceDnsName
+        HostedZoneId: !Ref EcrApiVpceDnsHostedZoneId
+        EvaluateTargetHealth: true
+  EcrDkrRecode:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId : !Ref EcrVpcePhz
+      Name: !Sub "dkr.ecr.${EcrRegion}.amazonaws.com"
+      Type: A
+      AliasTarget:
+        DNSName: !Ref EcrDkrVpceDnsName
+        HostedZoneId: !Ref EcrDkrVpceDnsHostedZoneId
+        EvaluateTargetHealth: true

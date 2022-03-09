@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deploy VPCEndpoints(ComputeVPC)
+#----------------------------------------------
+#----------------------------------------------
+Resources:
+  #------Security Group
+  VpceSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: FargetePoC-VpceSG
+      GroupDescription: "Allow TLS access from the same VPC"
+      VpcId: 
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+      SecurityGroupIngress: 
+        - 
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp:
+            Fn::ImportValue: FargetePoC-ComputeVPC-VpcCidr
+
+  #------VPC Endpoint
+  EcsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: 
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecs
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: yes
+      SubnetIds:
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1Id
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2Id
+      SecurityGroupIds: 
+        - !Ref VpceSG
+  EcsAgentEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: 
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecs-agent
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: yes
+      SubnetIds:
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1Id
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2Id
+      SecurityGroupIds: 
+        - !Ref VpceSG
+  EcsTelemetryEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: 
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecs-telemetry
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: yes
+      SubnetIds:
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1Id
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2Id
+      SecurityGroupIds: 
+        - !Ref VpceSG
+  LogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: 
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.logs
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: yes
+      SubnetIds:
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1Id
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2Id
+      SecurityGroupIds: 
+        - !Ref VpceSG
+#----temp
+  SsmEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: 
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: yes
+      SubnetIds:
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1Id
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2Id
+      SecurityGroupIds: 
+        - !Ref VpceSG
+
+  Ec2MessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: 
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: yes
+      SubnetIds:
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1Id
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2Id
+      SecurityGroupIds: 
+        - !Ref VpceSG
+
+  SsmMessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: 
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: yes
+      SubnetIds:
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1Id
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2Id
+      SecurityGroupIds: 
+        - !Ref VpceSG

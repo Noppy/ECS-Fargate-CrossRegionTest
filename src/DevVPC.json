@@ -1,0 +1,18 @@
+[
+    {
+      "ParameterKey": "DnsHostnames",
+      "ParameterValue": "true"
+    },
+    {
+      "ParameterKey": "DnsSupport",
+      "ParameterValue": "true"
+    },
+    {
+      "ParameterKey": "InternetAccess",
+      "ParameterValue": "true"
+    },
+    {
+      "ParameterKey": "VpcName",
+      "ParameterValue": "FargatePoC-DevVPC"
+    }
+  ]

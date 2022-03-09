@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deploy VPCEndpoints(ComputeVPC)
+#----------------------------------------------
+Resources:
+  #------Security Group
+  VpceSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: FargetePoC-VpceSG
+      GroupDescription: "Allow TLS access from the same VPC"
+      VpcId: 
+        Fn::ImportValue: FargetePoC-EcrVPC-VpcId
+      SecurityGroupIngress: 
+        - 
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: "0.0.0.0/0"
+  #------VPC Endpoint
+  EcrApiEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: 
+        Fn::ImportValue: FargetePoC-EcrVPC-VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.api
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - Fn::ImportValue: FargetePoC-EcrVPC-PrivateSubnet1Id
+        - Fn::ImportValue: FargetePoC-EcrVPC-PrivateSubnet2Id
+      SecurityGroupIds: 
+        - !Ref VpceSG
+  EcrDkrEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: 
+        Fn::ImportValue: FargetePoC-EcrVPC-VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.dkr
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - Fn::ImportValue: FargetePoC-EcrVPC-PrivateSubnet1Id
+        - Fn::ImportValue: FargetePoC-EcrVPC-PrivateSubnet2Id
+      SecurityGroupIds: 
+        - !Ref VpceSG
+  S3EndpointInterface:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: 
+        Fn::ImportValue: FargetePoC-EcrVPC-VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: false
+      SubnetIds:
+        - Fn::ImportValue: FargetePoC-EcrVPC-PrivateSubnet1Id
+        - Fn::ImportValue: FargetePoC-EcrVPC-PrivateSubnet2Id
+      SecurityGroupIds: 
+        - !Ref VpceSG
+#  S3Endpoint:
+#    Type: AWS::EC2::VPCEndpoint
+#    Properties:
+#      VpcId: 
+#        Fn::ImportValue: FargetePoC-EcrVPC-VpcId
+#      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+#      VpcEndpointType: Gateway
+#      RouteTableIds:
+#        - Fn::ImportValue: FargetePoC-EcrVPC-PublicSubnetRouteTableId
+#----------------------------------------------
+Outputs:
+  EcrApiEndpointId:
+    Description: VPCEndpoint Id for ECR(API)
+    Value: !Ref EcrApiEndpoint
+    Export:
+      Name: !Sub ${AWS::StackName}-EcrApiEndpointId
+  EcrDkrEndpointId:
+    Description: VPCEndpoint Id for ECR(docker)
+    Value: !Ref EcrDkrEndpoint
+    Export:
+      Name: !Sub ${AWS::StackName}-EcrDkrEndpointId
+  S3EndpointInterfaceId:
+    Description: VPCEndpoint Id for ECR(S3 Interface type)
+    Value: !Ref S3EndpointInterface
+    Export:
+      Name: !Sub ${AWS::StackName}-S3EndpointInterfaceId
+
+  

@@ -1,0 +1,50 @@
+[
+    {
+      "ParameterKey": "DnsHostnames",
+      "ParameterValue": "true"
+    },
+    {
+      "ParameterKey": "DnsSupport",
+      "ParameterValue": "true"
+    },
+    {
+      "ParameterKey": "InternetAccess",
+      "ParameterValue": "true"
+    },
+    {
+        "ParameterKey": "EnableNatGW",
+        "ParameterValue": "false"
+    },
+    {
+      "ParameterKey": "VpcName",
+      "ParameterValue": "FargatePoC-ComputeVPC"
+    },
+    {
+        "ParameterKey": "VpcCidr",
+        "ParameterValue": "10.1.0.0/16"
+    },
+    {
+        "ParameterKey": "PublicSubnet1Cidr",
+        "ParameterValue": "10.1.0.0/24"
+    },
+    {
+        "ParameterKey": "PublicSubnet2Cidr",
+        "ParameterValue": "10.1.16.0/24"
+    },
+    {
+        "ParameterKey": "PrivateSubnet1Cidr",
+        "ParameterValue": "10.1.32.0/19"
+    },
+    {
+        "ParameterKey": "PrivateSubnet2Cidr",
+        "ParameterValue": "10.1.128.0/19"
+    },
+    {
+        "ParameterKey": "TgwSubnet1Cidr",
+        "ParameterValue": "10.1.224.0/24"
+    },
+    {
+        "ParameterKey": "TgwSubnet2Cidr",
+        "ParameterValue": "10.1.240.0/24"
+    }
+  ]
