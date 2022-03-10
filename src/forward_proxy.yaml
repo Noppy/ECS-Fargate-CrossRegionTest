@@ -1,0 +1,415 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Forward Proxy(NLB+EC2)"
+#----------------------------------------------
+Parameters:
+  #VPC------------------
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  PublicSubnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: (Required)Specify 1st Public Subnet to run Proxy instances.
+  ElbSubnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: (Required)Specify 1st Subnet for NLB.
+  #EC2Instance----------
+  ProxyInstanceType: 
+    Type: String 
+    Default: t2.micro
+  ProxyAmiId:
+    Type: AWS::EC2::Image::Id
+    Description: (required) AMI ID
+    #Default: ami-050a677a0dbb257ab  #for Tokyo-region
+  #SecurityGroup--------
+  AllowCidrBlockForProxy:
+    Type: String
+    Description: (Required)Specify CIDR Block which is allowd to Forward Proxies.
+    MinLength: 9
+    MaxLength: 18
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: Must be like 10.1.0.0/16
+  #SquidAllowListValue---
+  AllowUrlsList:
+    Type: String 
+    Default: ".google.co.jp,github.com,gist.github.com"
+  #AutoScalingGroup------
+  AsgDesiredCapacity:
+    Type: Number 
+    Description: (Option) Number of Desired capacity size for AutoScaling Group.
+    Default: 1
+  AsgMaxSize:
+    Type: Number 
+    Description: (Option) Number of Maximum capacity size for AutoScaling Group.
+    Default: 1
+  AsgMinSize:
+    Type: Number 
+    Description: (Option) Number of Minimum capacity size for AutoScaling Group.
+    Default: 1
+  #------------------
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups:
+      -
+        Label:
+          default: "Network"
+        Parameters:
+          - VpcId
+          - PublicSubnets
+          - ElbSubnets
+      -
+        Label:
+          default: "Forward Proxy - Security Grup"
+        Parameters:
+          - AllowCidrBlockForProxy
+      -
+        Label:
+          default: "Forward Proxy - Instances"
+        Parameters:
+          - ProxyInstanceType!S
+          - ProxyAmiId
+          - AllowUrlsList
+      -
+        Label:
+          default: "Forward Proxy - AutoScaling"
+        Parameters:
+          - AsgDesiredCapacity
+          - AsgMaxSize
+          - AsgMinSize
+
+
+#----------------------------------------------
+Resources:
+  #--------------------------------------------
+  # IAM Role for Forward Proxy Instances(for ssm and Getting parameter stores)
+  EC2ForwardProxyRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - 
+          PolicyName: AllowGetParameterStore
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ssm:GetParameters"
+                Resource: '*'
+  EC2ForwardProxyRoleProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+        - !Ref EC2ForwardProxyRole
+  #--------------------------------------------
+  # Security Group
+  ForwardProxySg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Proxy inbound access
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        -
+          IpProtocol: tcp
+          FromPort: 3128
+          ToPort: 3128
+          CidrIp: 0.0.0.0/0
+      Tags: 
+        - Key: Name
+          Value: ForwardProxySg
+  #--------------------------------------------
+  # Lunch Template
+  ProxyLunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: ForwardProxyLunchTemplate
+      LaunchTemplateData:
+        ImageId: !Ref ProxyAmiId
+        InstanceType: !Ref ProxyInstanceType
+        IamInstanceProfile:
+          Name: !Ref EC2ForwardProxyRoleProfile
+        SecurityGroupIds:
+          - !Ref ForwardProxySg
+        MetadataOptions:
+          HttpTokens: required
+        Monitoring:
+          Enabled: true
+        TagSpecifications:
+          -
+            ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: ForwardProxy-Server
+        UserData:
+          Fn::Base64: !Sub | 
+            #!/bin/bash -xe
+            # Set hostname
+            hostnamectl set-hostname "ForwardProxy-Server"
+
+            #Setup AWS CLI
+            # Setup AWS CLI
+            REGION=$(TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"` \
+              && curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/availability-zone | sed -e 's/.$//')
+            aws configure set region ${!REGION}
+            aws configure set output json
+            aws configure get region
+            aws configure get output
+
+            # Setup CloudWatch Agent
+            sudo amazon-linux-extras enable collectd
+            sudo yum clean metadata
+            sudo yum -y install collectd
+            sudo yum -y install amazon-cloudwatch-agent
+            sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c ssm:AmazonCloudWatch-ForwardProxy
+
+            #install squid package
+            sudo yum -y install squid
+
+            #Setup squid configuration
+            cat > /etc/squid/squid.conf << EOL
+            # define ip address
+            acl localnet src 127.0.0.0/8
+            acl localnet src ::1/128
+
+            acl SSL_ports port 443
+            acl Safe_ports port 443		# https
+            acl CONNECT method CONNECT
+            
+            # Deny CONNECT to other than secure SSL ports
+            http_access deny !Safe_ports
+            http_access deny CONNECT !SSL_ports
+            
+            # Only allow cachemgr access from localhost
+            http_access allow localhost manager
+            http_access deny manager
+            
+            # from where browsing should be allowed
+            http_access allow localnet
+
+            # include url white list 
+            acl whitelist dstdomain "/etc/squid/allowlist" 
+            http_access allow whitelist 
+ 
+            # And finally deny all other access to this proxy 
+            http_access deny all 
+            #------------------------------------------
+            http_port 0.0.0.0:3128
+            
+            # Leave coredumps in the first cache dir
+            coredump_dir /var/spool/squid
+            
+            # anonymouse host name 
+            visible_hostname unknown
+            
+            # change log format
+            logformat squid %tl %>a %Ss/%03>Hs %<st %rm %ru %[un %Sh/%<a %mt
+            EOL
+
+            IFS=, LIST=( $(aws --output text ssm get-parameter --name SquidAllowList --query 'Parameter.Value') )
+            cp -f /dev/null /etc/squid/allowlist
+            for url in ${!LIST[@]}
+            do 
+              echo "${!url}" >> /etc/squid/allowlist
+            done
+
+            #Enable auto-launch and launch Squid.
+            systemctl enable --now squid.service
+  #--------------------------------------------
+  # Parameter store for Squid AllowList
+  ParameterStoreSquidAllowList:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: SquidAllowList
+      Description: "Allow URL List for Squid."
+      Type: StringList
+      Value: !Ref AllowUrlsList
+  ParameterStoreAmazonCloudWatch:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: AmazonCloudWatch-ForwardProxy
+      Description: "Configuration for CloudWatch Agent"
+      Type: String
+      Value: |
+        {
+          "agent": {
+            "metrics_collection_interval": 60,
+            "run_as_user": "root"
+          },
+          "logs": {
+            "logs_collected": {
+              "files": {
+                "collect_list": [
+                  {
+                    "file_path": "/var/log/squid/access.log",
+                    "log_group_name": "squid-access.log",
+                    "log_stream_name": "{instance_id}"
+                  },
+                  {
+                    "file_path": "/var/log/squid/cache.log",
+                    "log_group_name": "squid-cache.log",
+                    "log_stream_name": "{instance_id}"
+                  }
+                ]
+              }
+            }
+          },
+          "metrics": {
+            "append_dimensions": {
+              "AutoScalingGroupName": "${aws:AutoScalingGroupName}",
+              "ImageId": "${aws:ImageId}",
+              "InstanceId": "${aws:InstanceId}",
+              "InstanceType": "${aws:InstanceType}"
+            },
+            "metrics_collected": {
+              "collectd": {
+                "metrics_aggregation_interval": 60
+              },
+              "cpu": {
+                "measurement": [
+                  "cpu_usage_idle",
+                  "cpu_usage_iowait",
+                  "cpu_usage_user",
+                  "cpu_usage_system"
+                ],
+                "metrics_collection_interval": 60,
+                "resources": [
+                  "*"
+                ],
+                "totalcpu": false
+              },
+              "disk": {
+                "measurement": [
+                  "used_percent",
+                  "inodes_free"
+                ],
+                "metrics_collection_interval": 60,
+                "resources": [
+                  "*"
+                ]
+              },
+              "diskio": {
+                "measurement": [
+                  "io_time",
+                  "write_bytes",
+                  "read_bytes",
+                  "writes",
+                  "reads"
+                ],
+                "metrics_collection_interval": 60,
+                "resources": [
+                  "*"
+                ]
+              },
+              "mem": {
+                "measurement": [
+                  "mem_used_percent"
+                ],
+                "metrics_collection_interval": 60
+              },
+              "netstat": {
+                "measurement": [
+                  "tcp_established",
+                  "tcp_time_wait"
+                ],
+                "metrics_collection_interval": 60
+              },
+              "swap": {
+                "measurement": [
+                  "swap_used_percent"
+                ],
+                "metrics_collection_interval": 60
+              },
+              "statsd": {
+                "metrics_aggregation_interval": 60,
+                "metrics_collection_interval": 10,
+                "service_address": "127.0.0.1:8125"
+              }
+            }
+          }
+        }
+  #--------------------------------------------
+  # CloudWatch Logs log groups
+  LogGroupSquidAccess:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: "squid-access.log"
+      RetentionInDays: 3
+  LogGroupSquidCache:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: "squid-cache.log"
+      RetentionInDays: 3
+  #--------------------------------------------
+  # NLB
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets: !Ref ElbSubnets
+      Scheme: internal
+      Type: network
+      LoadBalancerAttributes:
+        -
+          Key: load_balancing.cross_zone.enabled
+          Value: true
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 3128
+      Protocol: TCP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VpcId
+      Port: 3128
+      Protocol: TCP
+      TargetType: instance
+      HealthCheckIntervalSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+  #--------------------------------------------
+  # AutoScalingGroup
+  AsgForForwardProxy:
+    DependsOn:
+      - ParameterStoreSquidAllowList
+      - ParameterStoreAmazonCloudWatch
+      - LogGroupSquidAccess
+      - LogGroupSquidCache
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties: 
+      VPCZoneIdentifier: !Ref PublicSubnets
+      LaunchTemplate:
+        LaunchTemplateId: !Ref ProxyLunchTemplate
+        Version: !GetAtt ProxyLunchTemplate.LatestVersionNumber
+      # Set NLB parameter
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      # Set Capacity size
+      DesiredCapacity: !Ref AsgDesiredCapacity
+      MaxSize: !Ref AsgMaxSize
+      MinSize: !Ref AsgMinSize
+Outputs:
+  LoadBalancerArn:
+    Description:  ID of the LB
+    Value: !Ref LoadBalancer
+    Export:
+      Name: !Sub "${AWS::StackName}-LoadBalancer"
+  LoadBalancerDns:
+    Description:  The DNS name for the LB. 
+    Value: !GetAtt LoadBalancer.DNSName
+    Export:
+      Name: !Sub "${AWS::StackName}-LoadBalancerDns"

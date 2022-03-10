@@ -26,8 +26,8 @@ Resources:
       VpcEndpointType: Interface
       PrivateDnsEnabled: true
       SubnetIds:
-        - Fn::ImportValue: FargetePoC-EcrVPC-PrivateSubnet1Id
-        - Fn::ImportValue: FargetePoC-EcrVPC-PrivateSubnet2Id
+        - Fn::ImportValue: FargetePoC-EcrVPC-Subnet1Id
+        - Fn::ImportValue: FargetePoC-EcrVPC-Subnet2Id
       SecurityGroupIds: 
         - !Ref VpceSG
   EcrDkrEndpoint:
@@ -39,8 +39,8 @@ Resources:
       VpcEndpointType: Interface
       PrivateDnsEnabled: true
       SubnetIds:
-        - Fn::ImportValue: FargetePoC-EcrVPC-PrivateSubnet1Id
-        - Fn::ImportValue: FargetePoC-EcrVPC-PrivateSubnet2Id
+        - Fn::ImportValue: FargetePoC-EcrVPC-Subnet1Id
+        - Fn::ImportValue: FargetePoC-EcrVPC-Subnet2Id
       SecurityGroupIds: 
         - !Ref VpceSG
   S3EndpointInterface:
@@ -52,8 +52,8 @@ Resources:
       VpcEndpointType: Interface
       PrivateDnsEnabled: false
       SubnetIds:
-        - Fn::ImportValue: FargetePoC-EcrVPC-PrivateSubnet1Id
-        - Fn::ImportValue: FargetePoC-EcrVPC-PrivateSubnet2Id
+        - Fn::ImportValue: FargetePoC-EcrVPC-Subnet1Id
+        - Fn::ImportValue: FargetePoC-EcrVPC-Subnet2Id
       SecurityGroupIds: 
         - !Ref VpceSG
 #  S3Endpoint:

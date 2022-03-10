@@ -37,7 +37,6 @@ aws --profile ${CONFMGR_PROFILE} sts get-caller-identity
 ```
 
 ## (2)Network準備
-
 ### (2)-(a) VPC作成
 ```shell
 # ComputeVPC
@@ -57,7 +56,7 @@ aws --profile ${COMPUTE_PROFILE} --region ${ECR_REGION} \
         --capabilities CAPABILITY_IAM ;
 
 # DevVPC
-aws --profile ${CONFMGR_PROFILE} --region ${ECR_REGION} \
+aws --profile ${CONFMGR_PROFILE} --region ${MAIN_REGION} \
     cloudformation create-stack \
         --stack-name FargetePoC-DevVPC \
         --template-body "file://./src/vpc-2az-2subnets.yaml" \
@@ -147,8 +146,8 @@ aws --profile ${COMPUTE_PROFILE} --region ${ECR_REGION} \
         --stack-name FargetePoC-EcrVPC-VPCE \
         --template-body "file://./src/VPCE_EcrVPC.yaml" ;
 ```
-### (2)-(d) ECR VPCのECRエンドポイント用のPrivateHostedZone作成
-設定に必要なVPCエンドポイントの情報を取得します。
+### (2)-(d) ECR VPCのVPCエンドポイント用のPrivateHostedZone作成
+#### (i) VPCエンドポイント(ECR)
 ```shell
 #情報取得
 #EcrApiVpce
@@ -213,8 +212,79 @@ CFN_STACK_PARAMETERS='
 
 aws --profile ${COMPUTE_PROFILE} --region ${MAIN_REGION} \
     cloudformation create-stack \
-        --stack-name FargetePoC-PHZ \
+        --stack-name FargetePoC-PHZ-Ecr \
         --template-body "file://./src/PHZ_ForEcrVpce.yaml" \
+        --parameters "${CFN_STACK_PARAMETERS}" ;
+```
+
+#### (ii) VPCエンドポイント(S3)
+
+```shell
+#情報取得
+S3EndpointInterfaceId=$(aws --profile ${COMPUTE_PROFILE} --region ${ECR_REGION} --output text \
+    cloudformation describe-stacks \
+        --stack-name FargetePoC-EcrVPC-VPCE \
+        --query 'Stacks[].Outputs[?OutputKey==`S3EndpointInterfaceId`].[OutputValue]')
+S3VpceDnsName=$(aws --profile ${COMPUTE_PROFILE} --region ${ECR_REGION} --output text \
+    ec2 describe-vpc-endpoints \
+        --filters "Name=vpc-endpoint-id,Values=${S3EndpointInterfaceId}" \
+    --query 'VpcEndpoints[].DnsEntries[0].DnsName')
+S3VpceDnsHostedZoneId=$(aws --profile ${COMPUTE_PROFILE} --region ${ECR_REGION} --output text \
+    ec2 describe-vpc-endpoints \
+        --filters "Name=vpc-endpoint-id,Values=${S3EndpointInterfaceId}" \
+    --query 'VpcEndpoints[].DnsEntries[0].HostedZoneId')
+
+
+#取得情報確認
+echo "
+S3EndpointInterfaceId = ${S3EndpointInterfaceId}
+S3VpceDnsHostedZoneId = ${S3VpceDnsHostedZoneId}
+S3VpceDnsName         = ${S3VpceDnsName}
+"
+```
+
+```shell
+CFN_STACK_PARAMETERS='
+[
+  {
+    "ParameterKey": "EcrRegion",
+    "ParameterValue": "'"${ECR_REGION}"'"
+  },
+  {
+    "ParameterKey": "S3VpceDnsName",
+    "ParameterValue": "'"${S3VpceDnsName}"'"
+  },
+  {
+    "ParameterKey": "S3VpceDnsHostedZoneId",
+    "ParameterValue": "'"${S3VpceDnsHostedZoneId}"'"
+  }
+]'
+
+aws --profile ${COMPUTE_PROFILE} --region ${MAIN_REGION} \
+    cloudformation create-stack \
+        --stack-name FargetePoC-PHZ-S3 \
+        --template-body "file://./src/PHZ_ForS3Vpce.yaml" \
+        --parameters "${CFN_STACK_PARAMETERS}" ;
+```
+
+## (3) ECRとDockerイメージの準備
+### (i) DockerRegistry準備
+```shell
+# 情報取得
+EcrAccountID=$(aws --profile ${CONFMGR_PROFILE} --output text sts get-caller-identity --query 'Account')
+
+#DockerRegistry作成
+CFN_STACK_PARAMETERS='
+[
+  {
+    "ParameterKey": "EcrAccountID",
+    "ParameterValue": "'"${EcrAccountID}"'"
+  }
+]'
+aws --profile ${CONFMGR_PROFILE} --region ${ECR_REGION} \
+    cloudformation create-stack \
+        --stack-name FargetePoC-PHZ-S3 \
+        --template-body "file://./src/EcrRegistry.yaml" \
         --parameters "${CFN_STACK_PARAMETERS}" ;
 ```
 
@@ -222,10 +292,16 @@ aws --profile ${COMPUTE_PROFILE} --region ${MAIN_REGION} \
 
 
 
+### (ii) DockerBuild環境の準備
+```shell
+aws --profile ${CONFMGR_PROFILE} --region ${MAIN_REGION} \
+    cloudformation create-stack \
+        --stack-name FargetePoC-PHZ-S3 \
+        --template-body "file://./src/PHZ_ForS3Vpce.yaml" \
+        --parameters "${CFN_STACK_PARAMETERS}" ;
 
 
 
 
 
-
-
+EcrAccountID=$(aws --profile ${CONFMGR_PROFILE} --output text sts get-caller-identity --query 'Account')

@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  EcrRegion:
+    Type: "String"
+  S3VpceDnsName:
+    Type: "String"
+  S3VpceDnsHostedZoneId:
+    Type: "String"
+Resources:
+  #------------------ PHZ for Ecr
+  S3VpcePhz:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      HostedZoneConfig:
+        Comment: "PHZ for S3 VPC endpoints in EcrVpc"
+      Name: !Sub s3.${EcrRegion}.amazonaws.com.
+      VPCs:
+        - VPCId:
+            Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+          VPCRegion: !Ref AWS::Region
+  EcrServiceBucketRecode:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId : !Ref S3VpcePhz
+      Name: !Sub "prod-${EcrRegion}-starport-layer-bucket.s3.${EcrRegion}.amazonaws.com"
+      Type: A
+      AliasTarget:
+        DNSName: !Ref S3VpceDnsName
+        HostedZoneId: !Ref S3VpceDnsHostedZoneId
+        EvaluateTargetHealth: true
+  TestBucketRecode:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId : !Ref S3VpcePhz
+      Name: !Sub "fargatepoc-sydney-bucket.s3.${EcrRegion}.amazonaws.com"
+      Type: A
+      AliasTarget:
+        DNSName: !Ref S3VpceDnsName
+        HostedZoneId: !Ref S3VpceDnsHostedZoneId
+        EvaluateTargetHealth: true

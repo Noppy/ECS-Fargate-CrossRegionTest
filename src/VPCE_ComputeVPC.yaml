@@ -72,7 +72,7 @@ Resources:
         - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2Id
       SecurityGroupIds: 
         - !Ref VpceSG
-#----temp
+#----一時的に設定(ComputeVPCのPrivateSubnetでEC2を一時的にたたてSSMで操作するためのもの)
   SsmEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
