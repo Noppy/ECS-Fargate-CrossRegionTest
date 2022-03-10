@@ -2,15 +2,6 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: "Forward Proxy(NLB+EC2)"
 #----------------------------------------------
 Parameters:
-  #VPC------------------
-  VpcId:
-    Type: AWS::EC2::VPC::Id
-  PublicSubnets:
-    Type: List<AWS::EC2::Subnet::Id>
-    Description: (Required)Specify 1st Public Subnet to run Proxy instances.
-  ElbSubnets:
-    Type: List<AWS::EC2::Subnet::Id>
-    Description: (Required)Specify 1st Subnet for NLB.
   #EC2Instance----------
   ProxyInstanceType: 
     Type: String 
@@ -48,13 +39,6 @@ Parameters:
 Metadata: 
   AWS::CloudFormation::Interface: 
     ParameterGroups:
-      -
-        Label:
-          default: "Network"
-        Parameters:
-          - VpcId
-          - PublicSubnets
-          - ElbSubnets
       -
         Label:
           default: "Forward Proxy - Security Grup"
@@ -118,7 +102,8 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allow Proxy inbound access
-      VpcId: !Ref VpcId
+      VpcId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
       SecurityGroupIngress:
         -
           IpProtocol: tcp
@@ -355,7 +340,9 @@ Resources:
   LoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Subnets: !Ref ElbSubnets
+      Subnets:
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1Id
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2Id
       Scheme: internal
       Type: network
       LoadBalancerAttributes:
@@ -374,7 +361,8 @@ Resources:
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      VpcId: !Ref VpcId
+      VpcId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
       Port: 3128
       Protocol: TCP
       TargetType: instance
@@ -391,7 +379,9 @@ Resources:
       - LogGroupSquidCache
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties: 
-      VPCZoneIdentifier: !Ref PublicSubnets
+      VPCZoneIdentifier:
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PublicSubnet1Id
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PublicSubnet2Id
       LaunchTemplate:
         LaunchTemplateId: !Ref ProxyLunchTemplate
         Version: !GetAtt ProxyLunchTemplate.LatestVersionNumber

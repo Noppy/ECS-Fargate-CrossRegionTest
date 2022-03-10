@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: "Deploy Docker registory"
 #----------------------------------------------
 Parameters:
-  EcrAccountID:
+  ComputeAccountID:
     Type: "String"
 #----------------------------------------------
 Resources:
@@ -26,7 +26,7 @@ Resources:
             Effect: "Allow"
             Principal:
               AWS:
-                - !Sub "arn:aws:iam::${EcrAccountID}:root"
+                - !Sub "arn:aws:iam::${ComputeAccountID}:root"
             Action:
               - "ecr:GetAuthorizationToken"
               - "ecr:BatchCheckLayerAvailability"

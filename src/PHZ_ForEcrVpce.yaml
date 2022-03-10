@@ -10,6 +10,8 @@ Parameters:
     Type: "String"
   EcrDkrVpceDnsHostedZoneId:
     Type: "String"
+  ConfMgrAccountID:
+    Type: "String"
 Resources:
   #------------------ PHZ for Ecr
   EcrVpcePhz:
@@ -36,7 +38,7 @@ Resources:
     Type: AWS::Route53::RecordSet
     Properties:
       HostedZoneId : !Ref EcrVpcePhz
-      Name: !Sub "dkr.ecr.${EcrRegion}.amazonaws.com"
+      Name: !Sub "${ConfMgrAccountID}.dkr.ecr.${EcrRegion}.amazonaws.com"
       Type: A
       AliasTarget:
         DNSName: !Ref EcrDkrVpceDnsName
