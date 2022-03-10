@@ -22,17 +22,7 @@ Resources:
     Type: AWS::Route53::RecordSet
     Properties:
       HostedZoneId : !Ref S3VpcePhz
-      Name: !Sub "prod-${EcrRegion}-starport-layer-bucket.s3.${EcrRegion}.amazonaws.com"
-      Type: A
-      AliasTarget:
-        DNSName: !Ref S3VpceDnsName
-        HostedZoneId: !Ref S3VpceDnsHostedZoneId
-        EvaluateTargetHealth: true
-  TestBucketRecode:
-    Type: AWS::Route53::RecordSet
-    Properties:
-      HostedZoneId : !Ref S3VpcePhz
-      Name: !Sub "fargatepoc-sydney-bucket.s3.${EcrRegion}.amazonaws.com"
+      Name: !Sub "*.s3.${EcrRegion}.amazonaws.com"
       Type: A
       AliasTarget:
         DNSName: !Ref S3VpceDnsName
