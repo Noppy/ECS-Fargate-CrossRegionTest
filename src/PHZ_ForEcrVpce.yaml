@@ -36,7 +36,7 @@ Resources:
     Type: AWS::Route53::RecordSet
     Properties:
       HostedZoneId : !Ref EcrVpcePhz
-      Name: !Sub "dkr.ecr.${EcrRegion}.amazonaws.com"
+      Name: !Sub "*.dkr.ecr.${EcrRegion}.amazonaws.com"
       Type: A
       AliasTarget:
         DNSName: !Ref EcrDkrVpceDnsName

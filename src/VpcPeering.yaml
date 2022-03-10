@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: '2010-09-09'
+#---------------------------------------
+Parameters:
+  EcrRegion:
+    Type: "String"
+  EcrVpcId:
+    Type: "String"
+  EcrVpcCider:
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    Default: 10.1.0.0/16
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: Must be like 10.1.0.0/16
+#---------------------------------------
+Resources:
+  #------------------ VPC Peering
+  VpcPeering:
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties: 
+      VpcId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+      PeerRegion: !Ref EcrRegion
+      PeerVpcId: !Ref EcrVpcId
+      Tags:
+        - Key: Name
+          Value: FargatePoC-ComputeVPC-EcrVPC-Peer
+  #------------------ ComputeVPC Routing
+  AddEcrVpcRouteToComputeVpcPrivateRouteTable1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: 
+        Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1RouteTableId
+      DestinationCidrBlock: !Ref EcrVpcCider
+      VpcPeeringConnectionId: !Ref VpcPeering
+  AddEcrVpcRouteToComputeVpcPrivateRouteTable2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: 
+        Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2RouteTableId
+      DestinationCidrBlock: !Ref EcrVpcCider
+      VpcPeeringConnectionId: !Ref VpcPeering
+#---------------------------------------
+Outputs:
+  VpcPeeringId:
+    Value: !Ref VpcPeering
+    Export:
+      Name: !Sub ${AWS::StackName}-VpcPeeringId
