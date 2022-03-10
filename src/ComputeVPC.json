@@ -38,13 +38,5 @@
     {
         "ParameterKey": "PrivateSubnet2Cidr",
         "ParameterValue": "10.1.128.0/19"
-    },
-    {
-        "ParameterKey": "TgwSubnet1Cidr",
-        "ParameterValue": "10.1.224.0/24"
-    },
-    {
-        "ParameterKey": "TgwSubnet2Cidr",
-        "ParameterValue": "10.1.240.0/24"
     }
   ]

@@ -12,10 +12,6 @@
       "ParameterValue": "false"
     },
     {
-        "ParameterKey": "EnableNatGW",
-        "ParameterValue": "false"
-    },
-    {
       "ParameterKey": "VpcName",
       "ParameterValue": "FargatePoC-EcrVPC"
     },
@@ -24,27 +20,19 @@
         "ParameterValue": "10.2.0.0/16"
     },
     {
-      "ParameterKey": "PublicSubnet1Name",
-      "ParameterValue": "TgwSub1"
+      "ParameterKey": "Subnet1Name",
+      "ParameterValue": "PrivateSubnet1"
     },
     {
-        "ParameterKey": "PublicSubnet1Cidr",
+        "ParameterKey": "Subnet1Cidr",
         "ParameterValue": "10.2.0.0/24"
     },
     {
-      "ParameterKey": "PublicSubnet2Name",
-      "ParameterValue": "TgwSub2"
+      "ParameterKey": "Subnet2Name",
+      "ParameterValue": "PrivateSubnet2"
     },
     {
-        "ParameterKey": "PublicSubnet2Cidr",
+        "ParameterKey": "Subnet2Cidr",
         "ParameterValue": "10.2.16.0/24"
-    },
-    {
-        "ParameterKey": "PrivateSubnet1Cidr",
-        "ParameterValue": "10.2.32.0/19"
-    },
-    {
-        "ParameterKey": "PrivateSubnet2Cidr",
-        "ParameterValue": "10.2.128.0/19"
     }
   ]
