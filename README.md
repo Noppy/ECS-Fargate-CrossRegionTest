@@ -177,15 +177,12 @@ EcrDkrVpceDnsHostedZoneId=$(aws --profile ${COMPUTE_PROFILE} --region ${ECR_REGI
         --filters "Name=vpc-endpoint-id,Values=${EcrDkrVpceId}" \
     --query 'VpcEndpoints[].DnsEntries[0].HostedZoneId')
 
-ConfMgrAccountID=$(aws --profile ${CONFMGR_PROFILE} --output text sts get-caller-identity --query 'Account')
-
 #取得情報確認
 echo "
 EcrApiVpceDnsName         = ${EcrApiVpceDnsName}
 EcrApiVpceDnsHostedZoneId = ${EcrApiVpceDnsHostedZoneId}
 EcrDkrVpceDnsName         = ${EcrDkrVpceDnsName}
 EcrDkrVpceDnsHostedZoneId = ${EcrDkrVpceDnsHostedZoneId}
-ConfMgrAccountID          = ${ConfMgrAccountID}
 "
 ```
 
@@ -211,10 +208,6 @@ CFN_STACK_PARAMETERS='
   {
     "ParameterKey": "EcrDkrVpceDnsHostedZoneId",
     "ParameterValue": "'"${EcrDkrVpceDnsHostedZoneId}"'"
-  },
-  {
-    "ParameterKey": "ConfMgrAccountID",
-    "ParameterValue": "'"${ConfMgrAccountID}"'"
   }
 ]'
 
