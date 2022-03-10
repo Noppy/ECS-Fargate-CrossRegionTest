@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Deploy Docker registory"
+#----------------------------------------------
+Parameters:
+  EcrAccountID:
+    Type: "String"
+#----------------------------------------------
+Resources:
+   EcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "fargatepoc-repo"
+      ImageScanningConfiguration: 
+         ScanOnPush: true
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "AllowAllPermissionsToOwnAccount"
+            Effect: "Allow"
+            Principal:
+              AWS:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action:
+              - "ecr:*"
+          - Sid: "AllowPullPermissionsToOtherAccount"
+            Effect: "Allow"
+            Principal:
+              AWS:
+                - !Sub "arn:aws:iam::${EcrAccountID}:root"
+            Action:
+              - "ecr:GetAuthorizationToken"
+              - "ecr:BatchCheckLayerAvailability"
+              - "ecr:GetDownloadUrlForLayer"
+              - "ecr:BatchGetImage"
+      Tags: 
+        - Key: "Name"
+          Value: "FargatePoC-EcrRepository"
+#----------------------------------------------
+Outputs:
+  EcrRepositoryId:
+    Value: !Ref EcrRepository
+    Export:
+      Name: !Sub ${AWS::StackName}-EcrRepositoryId
+  EcrRepositoryArn:
+    Value: !GetAtt EcrRepository.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-EcrRepositoryArn
+  EcrRepositoryUri:
+    Value: !GetAtt EcrRepository.RepositoryUri
+    Export:
+      Name: !Sub ${AWS::StackName}-EcrRepositoryUri    

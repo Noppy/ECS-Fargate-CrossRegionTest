@@ -268,12 +268,12 @@ aws --profile ${COMPUTE_PROFILE} --region ${MAIN_REGION} \
 ```
 
 ## (3) ECRとDockerイメージの準備
-### (i) DockerRegistry準備
+### (i) DockerRepository準備
 ```shell
 # 情報取得
 EcrAccountID=$(aws --profile ${CONFMGR_PROFILE} --output text sts get-caller-identity --query 'Account')
 
-#DockerRegistry作成
+#DockerRepository作成
 CFN_STACK_PARAMETERS='
 [
   {
@@ -283,25 +283,131 @@ CFN_STACK_PARAMETERS='
 ]'
 aws --profile ${CONFMGR_PROFILE} --region ${ECR_REGION} \
     cloudformation create-stack \
-        --stack-name FargetePoC-PHZ-S3 \
-        --template-body "file://./src/EcrRegistry.yaml" \
+        --stack-name FargetePoC-EcrRepository \
+        --template-body "file://./src/EcrRepository.yaml" \
         --parameters "${CFN_STACK_PARAMETERS}" ;
 ```
 
-
-
-
-
 ### (ii) DockerBuild環境の準備
 ```shell
+#最新のAmazon Linux2のAMI IDを取得
+AL2_AMIID=$(aws --profile ${CONFMGR_PROFILE} --region ${MAIN_REGION} --output text \
+    ec2 describe-images \
+        --owners amazon \
+        --filters 'Name=name,Values=amzn2-ami-hvm-2.0.????????.?-x86_64-gp2' \
+                  'Name=state,Values=available' \
+        --query 'reverse(sort_by(Images, &CreationDate))[:1].ImageId' );
+echo "
+AL2_AMIID = ${AL2_AMIID}"
+
+#インスタンス作成
+CFN_STACK_PARAMETERS='
+[
+  {
+    "ParameterKey": "AmiId",
+    "ParameterValue": "'"${AL2_AMIID}"'"
+  }
+]'
+
 aws --profile ${CONFMGR_PROFILE} --region ${MAIN_REGION} \
     cloudformation create-stack \
-        --stack-name FargetePoC-PHZ-S3 \
-        --template-body "file://./src/PHZ_ForS3Vpce.yaml" \
-        --parameters "${CFN_STACK_PARAMETERS}" ;
+        --stack-name FargetePoC-DockerBuilder \
+        --template-body "file://./src/DockerBuildInstance.yaml" \
+        --parameters "${CFN_STACK_PARAMETERS}" \
+        --capabilities CAPABILITY_IAM ;
+```
 
+### (iii) デモ用のdockerイメージを作成
+DockerBuildインスタンスで、デモ用のphpのwebサーバのコンテナを作成し、ECRリポジトリに登録します。
+- 手順
+    - Systems Manager - Session ManagerでDockerBuildインスタンスのOSにログイン
+    - 下記コマンドを実行し環境を準備し、dokcerイメージ作成 & ECR登録を行う
 
+#### DockerBuildインスタンス環境準備
+```shell
+#ec2-userにスイッチ
+sudo -u ec2-user -i
 
+# Setup AWS CLI
+REGION="<$ECR_REGION のリージョンコードを手動設定>"
+aws configure set region ${REGION}
+aws configure set output json
 
+#動作テスト(作成したECRレポジトリがリストに表示されることを確認)
+aws ecr describe-repositories
 
-EcrAccountID=$(aws --profile ${CONFMGR_PROFILE} --output text sts get-caller-identity --query 'Account')
+#dockerテスト(下記コマンドでサーバ情報が参照できることを確認)
+docker info
+```
+#### Dockerイメージ作成
+```shell
+#コンテナイメージ用のディレクトリを作成し移動
+mkdir httpd-container
+cd httpd-container
+
+#データ用フォルダを作成
+mkdir src
+
+#dockerコンテナの定義ファイルを作成
+cat > Dockerfile << EOL
+# setting base image
+FROM php:8.1-apache
+
+RUN set -x && \
+    apt-get update 
+
+COPY src/ /var/www/html/
+EOL
+
+#
+cat > src/index.php << EOL
+<html>
+  <head>
+    <title>PHP Sample</title>
+  </head>
+  <body>
+    <?php echo gethostname(); ?>
+  </body>
+</html>
+EOL
+
+#Docker build
+docker build -t httpd-sample:ver01 .
+docker images
+
+#コンテナの動作確認
+docker run -d -p 8080:80 httpd-sample:ver01
+docker ps #コンテナが稼働していることを確認
+
+#接続確認
+# <title>PHP Sample</title>という文字が表示されたら成功！！
+curl http://localhost:8080
+```
+#### ECR登録
+```shell
+REPO_URL=$( aws --output text \
+    ecr describe-repositories \
+        --repository-names fargatepoc-repo \
+    --query 'repositories[].repositoryUri' ) ;
+echo "
+REPO_URL = ${REPO_URL}
+"
+# ECR登録用のタグを作成
+docker tag httpd-sample:ver01 ${REPO_URL}:latest
+docker images #作成したtagが表示されていることを確認
+
+#ECRログイン
+#"Login Succeeded"と表示されることを確認
+aws ecr get-login-password | docker login --username AWS --password-stdin ${REPO_URL}
+
+#イメージのpush
+docker push ${REPO_URL}:latest
+
+#ECR上のレポジトリ確認
+aws ecr list-images --repository-name fargatepoc-repo
+```
+#### ログアウト
+```shell
+exit  #ec2-userからの戻る
+exit  #SSMからのログアウト
+```
