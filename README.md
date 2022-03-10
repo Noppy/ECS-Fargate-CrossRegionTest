@@ -1,12 +1,33 @@
 # ECS-Fargate-CrossRegionTest
+本検証は、ECS＋Fargate構成で異なるリージョンのECRレポジトリにPublicなネットワークを経由せずVPCエンドポリシー経由でアクセスするための構成の検証です。
+
+# 検証概要
+## 検証構成
+<img src="./documents/architecture.svg" width=600>
+
+## 検証ポイント
+この構成のポイントは以下の２点です。
+1. ECRレポジトリと同一リージョンのVPCに、ECRアクセスで必要となる以下の３つのエンドポイントを全てインターフェース型のVPCエンドポイントで用意する
+    - ECR(api)
+    - ECR(dkr)
+    - S3(*1)
+1. VPCエンドポイントに誘導するため、PrivateHostedZoneでDNSを意図的に変更する
+    - ECR(api): 
+        - DNSレコード名: `api.ecr.region-code.amazonaws.com`
+        - 値: `エイリアスでVPCE(ECR:api)を設定`
+    - ECR(dkr): 
+        - DNSレコード名: `*.dkr.ecr.region-code.amazonaws.com` (*2)
+        - 値: `エイリアスでVPCE(ECR:dkr)を設定`
+    - S3(インターフェース型)
+        - DNSレコード名: `*.s3.ap-southeast-2.amazonaws.com` (*2)
+        - 値: `エイリアスでVPCE(S3)を設定`
+
+(*1) GW型は異なるVPCからVPCPeeringやTGW経由でアクセスできないためNG。
+
+(*2) ECR(dkr)は`AWSアカウントID.dkr.ecr`、S3は`バケット名.s3.`と条件によりDNS名が変わるためレコードにワイルドカード(`*`)を活用している。
 
 
-# 作成環境
-## (1) 構成概要図
-### (1)-(a) 全体構成
-
-
-# 作成手順
+# 検証手順
 ## (1)事前設定
 ### (1)-(a) 作業環境の準備
 下記を準備します。
@@ -269,7 +290,7 @@ aws --profile ${COMPUTE_PROFILE} --region ${MAIN_REGION} \
 ```
 
 ## (3) ECRとDockerイメージの準備
-### (i) DockerRepository準備
+### (3)-(a) DockerRepository準備
 ```shell
 # 情報取得
 ComputeAccountID=$(aws --profile ${COMPUTE_PROFILE} --output text sts get-caller-identity --query 'Account')
@@ -289,7 +310,7 @@ aws --profile ${CONFMGR_PROFILE} --region ${ECR_REGION} \
         --parameters "${CFN_STACK_PARAMETERS}" ;
 ```
 
-### (ii) DockerBuild環境の準備
+###  (3)-(b) DockerBuild環境の準備
 ```shell
 #最新のAmazon Linux2のAMI IDを取得
 AL2_AMIID=$(aws --profile ${CONFMGR_PROFILE} --region ${MAIN_REGION} --output text \
@@ -318,7 +339,7 @@ aws --profile ${CONFMGR_PROFILE} --region ${MAIN_REGION} \
         --capabilities CAPABILITY_IAM ;
 ```
 
-### (iii) デモ用のdockerイメージを作成
+###  (3)-(c) デモ用のdockerイメージを作成
 DockerBuildインスタンスで、デモ用のphpのwebサーバのコンテナを作成し、ECRリポジトリに登録します。
 - 手順
     - Systems Manager - Session ManagerでDockerBuildインスタンスのOSにログイン
@@ -327,7 +348,7 @@ DockerBuildインスタンスで、デモ用のphpのwebサーバのコンテナ
     ```
     - 下記コマンドを実行し環境を準備し、dokcerイメージ作成 & ECR登録を行う
 
-#### DockerBuildインスタンス環境準備
+#### (i)DockerBuildインスタンス環境準備
 ```shell
 #ec2-userにスイッチ
 sudo -u ec2-user -i
@@ -343,7 +364,7 @@ aws ecr describe-repositories
 #dockerテスト(下記コマンドでサーバ情報が参照できることを確認)
 docker info
 ```
-#### Dockerイメージ作成
+#### (ii)Dockerイメージ作成
 ```shell
 #コンテナイメージ用のディレクトリを作成し移動
 mkdir httpd-container
@@ -387,7 +408,7 @@ docker ps #コンテナが稼働していることを確認
 # <title>PHP Sample</title>という文字が表示されたら成功！！
 curl http://localhost:8080
 ```
-#### ECR登録
+#### (iii)ECR登録
 ```shell
 REPO_URL=$( aws --output text \
     ecr describe-repositories \
@@ -410,14 +431,14 @@ docker push ${REPO_URL}:latest
 #ECR上のレポジトリ確認
 aws ecr list-images --repository-name fargatepoc-repo
 ```
-#### ログアウト
+#### (iv)ログアウト
 ```shell
 exit  #ec2-userからの戻る
 exit  #SSMからのログアウト
 ```
 
 ## (4) EC２インスタンス単独でのdocker pullテスト
-### (i) FowardProxy設置(yumアップデート用)
+### (4)-(a) FowardProxy設置(yumアップデート用)
 ```shell
 # Amazon Linux2のyumリポジトリのみ許可
 AllowUrlsList="amazonlinux-2-repos-${MAIN_REGION}.s3.dualstack.${MAIN_REGION}.amazonaws.com,amazonlinux-2-repos-${MAIN_REGION}.s3.${MAIN_REGION}.amazonaws.com,"
@@ -466,8 +487,8 @@ aws --profile ${COMPUTE_PROFILE} --region ${MAIN_REGION} \
         --parameters "${CFN_STACK_PARAMETERS}" \
         --capabilities CAPABILITY_IAM ;
 ```
-### (ii) ECR PULLテスト用インスタンス設置
-#### インスタンスの作成
+### (4)-(b) ECR PULLテスト用インスタンス設置
+#### (i)インスタンスの作成
 ```shell
 #最新のAmazon Linux2のAMI IDを取得
 AL2_AMIID=$(aws --profile ${COMPUTE_PROFILE} --region ${MAIN_REGION} --output text \
@@ -479,8 +500,7 @@ AL2_AMIID=$(aws --profile ${COMPUTE_PROFILE} --region ${MAIN_REGION} --output te
 FowardProxyDns=$(aws --profile ${COMPUTE_PROFILE} --region ${MAIN_REGION} --output text\
     cloudformation describe-stacks \
         --stack-name FargetePoC-FowardPorxy \
-    --query 'Stacks[].Outputs[?OutputKey==`LoadBalancerDns`].[OutputValue]'
-)
+    --query 'Stacks[].Outputs[?OutputKey==`LoadBalancerDns`].[OutputValue]' )
 echo "
 AL2_AMIID = ${AL2_AMIID}
 FowardProxyDns = ${FowardProxyDns}
@@ -507,7 +527,7 @@ aws --profile ${COMPUTE_PROFILE} --region ${MAIN_REGION} \
         --parameters "${CFN_STACK_PARAMETERS}" \
         --capabilities CAPABILITY_IAM ;
 ```
-#### 情報の取得
+#### (ii)情報の取得
 この後の作業に必要となる情報を取得する
 ```shell
 #テスト用インスタンスのインスタンスID確認
@@ -522,7 +542,7 @@ aws --profile ${CONFMGR_PROFILE} --region ${ECR_REGION} \
         --repository-names fargatepoc-repo \
     --query 'repositories[].repositoryUri' ;
 ```
-#### インスタンスのセットアップ(docker & aws cli)
+#### (iii)インスタンスのセットアップ(docker & aws cli)
  - Systems Manager - Session Managerで確認したインスタンスIDのOSにログイン
      ```shell
     aws --profile ${COMPUTE_PROFILE} --region ${MAIN_REGION} ssm start-session --target "<DockerテストインスタンスのID>"
@@ -547,7 +567,7 @@ REGION="<$ECR_REGION のリージョンコードを手動設定>"
 aws configure set region ${REGION}
 aws configure set output json
 ```
-#### Docker pullテスト
+#### (iv)Docker pullテスト
 
 ```shell
 REPO_URL="<予め確認したfargatepoc-repoのURLを設定>"
@@ -564,6 +584,48 @@ docker images
 ```
 
 ## (5) Faragetでのテスト
+### (5)-(a) ECSクラスター/Fargateタスク&サービス作成
 ```shell
+#情報取得
+EcrRepositoryUri=$(aws --profile ${CONFMGR_PROFILE} --region ${ECR_REGION} --output text\
+    cloudformation describe-stacks \
+        --stack-name FargetePoC-EcrRepository \
+    --query 'Stacks[].Outputs[?OutputKey==`EcrRepositoryUri`].[OutputValue]' )
+echo "
+EcrRepositoryUri = ${EcrRepositoryUri}
+"
+```
+```shell
+#パラメータJSON生成
+CFN_STACK_PARAMETERS='
+[
+  {
+    "ParameterKey": "ImageUri",
+    "ParameterValue": "'"${EcrRepositoryUri}:latest"'"
+  }
+]'
 
+#スタック作成
+aws --profile ${COMPUTE_PROFILE} --region ${MAIN_REGION} \
+    cloudformation create-stack \
+        --stack-name FargetePoC-EcsFargateAlb \
+        --template-body "file://./src/EcsFargateAlb.yaml" \
+        --parameters "${CFN_STACK_PARAMETERS}" \
+        --capabilities CAPABILITY_IAM ;
+```
+### (5)-(b) 動作テスト
+```shell
+#情報取得
+FargateServiceUrl=$(aws --profile ${COMPUTE_PROFILE} --region ${MAIN_REGION} --output text\
+    cloudformation describe-stacks \
+        --stack-name FargetePoC-EcsFargateAlb \
+    --query 'Stacks[].Outputs[?OutputKey==`LoadBalancerDns`].[OutputValue]' )
+echo "
+FargateServiceUrl = ${FargateServiceUrl}
+"
+```
+アクセスしてhtmlが表示されればOK!
+```shell
+#アクセステスト
+curl "http://${FargateServiceUrl}"
 ```

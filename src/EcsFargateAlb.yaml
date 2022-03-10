@@ -1,0 +1,158 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Deploy Fargate and ALB
+#----------------------------------------------
+Parameters:
+  ImageUri:
+    Type: "String"
+#----------------------------------------------
+Resources:
+  #SG----------------------
+  AlbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http protocol
+      VpcId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+      SecurityGroupIngress:
+        -
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags: 
+        - Key: Name
+          Value: AlbSg
+  TaskSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Attach ECS Fargate task
+      VpcId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+      SecurityGroupIngress:
+        -
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref AlbSg
+      Tags: 
+        - Key: Name
+          Value: ForwardProxySg
+  #ALB---------------------
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Scheme: internet-facing
+      Subnets:
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PublicSubnet1Id
+        - Fn::ImportValue: FargetePoC-ComputeVPC-PublicSubnet2Id
+      SecurityGroups:
+        - !Ref AlbSg
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId:
+        Fn::ImportValue: FargetePoC-ComputeVPC-VpcId
+      Port: 80
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckIntervalSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+  #IAM Role---------------------
+  EcsTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+  #Logs---------------------
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: "/ecs/fargatepoc-httpd"
+  #ECS---------------------
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties: 
+      Tags: 
+        - Key: Name
+          Value: FargatePoc-EcsCluster
+  EcsTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: 256
+      Memory: 512
+      NetworkMode: awsvpc
+      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
+      ContainerDefinitions:
+       - Name: httpd
+         Image: !Ref ImageUri
+         PortMappings:
+           - ContainerPort: 80
+             HostPort: 80
+             Protocol: tcp
+         Environment:
+           - Name: TZ
+             Value: Asia/Tokyo
+         LogConfiguration:
+           LogDriver: awslogs
+           Options:
+             awslogs-region: !Ref 'AWS::Region'
+             awslogs-group: !Ref LogGroup
+             awslogs-stream-prefix: app
+         Essential: true
+  EcsService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref EcsCluster
+      TaskDefinition: !Ref EcsTaskDefinition
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DesiredCount: 1
+      LaunchType: FARGATE
+      LoadBalancers:
+        -
+          ContainerName: httpd
+          ContainerPort: 80
+          TargetGroupArn: !Ref TargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref TaskSg
+          Subnets:
+            - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet1Id
+            - Fn::ImportValue: FargetePoC-ComputeVPC-PrivateSubnet2Id
+#----------------------------------------------
+Outputs:
+  LoadBalancerArn:
+    Description:  ID of the LB
+    Value: !Ref LoadBalancer
+    Export:
+      Name: !Sub "${AWS::StackName}-LoadBalancer"
+  LoadBalancerDns:
+    Description:  The DNS name for the LB. 
+    Value: !GetAtt LoadBalancer.DNSName
+    Export:
+      Name: !Sub "${AWS::StackName}-LoadBalancerDns"
